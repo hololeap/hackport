@@ -1,6 +1,0 @@
-[submodule "cabal"]
-	path = cabal
-	url = https://github.com/gentoo-haskell/cabal.git
-[submodule "hackage-security"]
-	path = hackage-security
-	url = https://github.com/gentoo-haskell/hackage-security.git
