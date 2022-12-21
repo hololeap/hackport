@@ -27,7 +27,6 @@ import Data.Version (showVersion)
 import Distribution.Pretty (prettyShow)
 import Distribution.Simple.Utils (cabalVersion)
 
-import qualified Paths_cabal_install
 import qualified Paths_hackport
 
 main :: IO ()
@@ -66,10 +65,6 @@ globalParser = Opt.info (Opt.helper <*> parser) infoMod
             printVersion = putStrLn
               $  "hackport version "
               ++ showVersion Paths_hackport.version
-              ++ "\nusing cabal-install "
-              ++ showVersion Paths_cabal_install.version
-              ++ " and the Cabal library version "
-              ++ prettyShow cabalVersion
 
         numericVersionParser :: Opt.Parser (IO ())
         numericVersionParser = Opt.flag' printNumericVersion

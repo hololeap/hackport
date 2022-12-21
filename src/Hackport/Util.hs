@@ -1,7 +1,6 @@
 module Hackport.Util
   ( getPortageDir
   , withHackportContext
-  , defaultRemoteRepo
   ) where
 
 import Control.Monad.Trans.Control
@@ -22,6 +21,8 @@ import Overlays (getOverlayPath)
 
 import Hackport.Env
 
+import Debug.Trace
+
 getPortageDir :: Env env FilePath
 getPortageDir = do
   (GlobalEnv verbosity _ portagePathM, _) <- ask
@@ -37,18 +38,8 @@ withHackportContext :: (DCG.RepoContext -> Env env a) -> Env env a
 withHackportContext callback = do
     (GlobalEnv verbosity _ _, _) <- ask
     overlayPath <- getOverlayPath
-    let flags = DCG.defaultGlobalFlags {
-                    DCG.globalRemoteRepos = DUN.toNubList [defaultRemoteRepo]
-                  , DCG.globalCacheDir    = DSS.Flag $ overlayPath </> ".hackport"
-                }
+    defaultConf <- liftIO DCC.commentSavedConfig
+    let flags = DCC.savedGlobalFlags defaultConf
     control
-      $ \runInIO -> DCG.withRepoContext verbosity flags
+      $ \runInIO -> DCG.withRepoContext verbosity (traceShowId flags)
       $ runInIO . (callback <=< restoreM)
-
--- | Default remote repository. Defaults to [hackage](hackage.haskell.org).
-defaultRemoteRepo :: DCT.RemoteRepo
-defaultRemoteRepo = DCC.addInfoForKnownRepos
-    (DCT.emptyRemoteRepo (DCT.RepoName name)) { DCT.remoteRepoURI = uri }
-   where
-    uri  = fromJust $ NU.parseURI "https://hackage.haskell.org/"
-    name = "hackage.haskell.org"
