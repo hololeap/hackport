@@ -1,3 +1,17 @@
+## v0.8.3.0 (2023-05-06)
+
+Release v0.8.3.0
+
+- Set modern defaults for LocalInfo in Portage.Host
+
+  This will help in the event that askPortageq fails, such as on a
+  clean stage3 chroot.
+
+- Only add current ARCH to KEYWORDS
+
+  No longer pass KEYWORDS forward from previous ebuilds. Only add
+  current ARCH by default.
+
 ## v0.8.2.1 (2023-04-02)
 
 v0.8.2.1
