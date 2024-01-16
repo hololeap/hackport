@@ -676,7 +676,7 @@ library hackport-external-libs-cabal-install
 --     Distribution.Client.CmdErrorMessages
 --     Distribution.Client.CmdExec
 --     Distribution.Client.CmdFreeze
---     Distribution.Client.CmdHaddock
+    Distribution.Client.CmdHaddock
     Distribution.Client.CmdHaddockProject
 --     Distribution.Client.CmdInstall
     Distribution.Client.CmdInstall.ClientInstallFlags
