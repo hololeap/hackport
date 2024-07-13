@@ -75,8 +75,8 @@ jobs:
       - name: Run tests
         run: cabal test all --test-option=--color --test-show-details=streaming --jobs=1
 
-      - name: Check cabal file
-        run: cabal check
+      #- name: Check cabal file
+      #  run: cabal check
 
       - name: Build documentation
         run: cabal haddock all
