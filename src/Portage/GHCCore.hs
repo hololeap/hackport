@@ -14,6 +14,8 @@ module Portage.GHCCore
         , finalizePD
         , platform
         , dependencySatisfiable
+        , ghcs
+        , ghc
         -- hspec exports
         , packageIsCoreInAnyGHC
         ) where
@@ -33,23 +35,24 @@ import Distribution.Types.ComponentRequestedSpec (defaultComponentRequestedSpec)
 
 import Distribution.Pretty (prettyShow)
 
+import qualified Data.Map as M
 import Data.Maybe
 import Data.List ( nub )
 import qualified Data.Set as S
 
 import Debug.Trace
 
--- | Try each @GHC@ version in the specified order, from left to right.
--- The first @GHC@ version in this list is a minimum default.
-ghcs :: [(DC.CompilerInfo, InstalledPackageIndex)]
-ghcs =
-    [ ghc902
-    , ghc924, ghc925, ghc926, ghc927, ghc928
-    , ghc945, ghc946, ghc947, ghc948
-    , ghc962, ghc963, ghc964, ghc965, ghc966
-    , ghc982, ghc983, ghc984
-    , ghc9101
-    , ghc9121
+-- | Try each @GHC@ version in the order of the key.
+-- The first @GHC@ version in this map is a minimum default.
+ghcs :: M.Map [Int] (DC.CompilerInfo, InstalledPackageIndex)
+ghcs = M.fromList
+    [ ([9,0,2],ghc902)
+    , ([9,2,4],ghc924), ([9,2,5],ghc925), ([9,2,6],ghc926), ([9,2,7],ghc927), ([9,2,8],ghc928)
+    , ([9,4,5],ghc945), ([9,4,6],ghc946), ([9,4,7],ghc947), ([9,4,8],ghc948)
+    , ([9,6,2],ghc962), ([9,6,3],ghc963), ([9,6,4],ghc964), ([9,6,5],ghc965), ([9,6,6],ghc966)
+    , ([9,8,2],ghc982), ([9,8,3],ghc983), ([9,8,4],ghc984)
+    , ([9,10,1],ghc9101)
+    , ([9,12,1],ghc9121)
     ]
 
 -- | Maybe determine the appropriate 'Cabal.Version' of the @Cabal@ package
@@ -102,7 +105,7 @@ packageIsCore index pn = not . null $ lookupPackageName index pn
 -- >>> packageIsCoreInAnyGHC (Cabal.mkPackageName "array")
 -- True
 packageIsCoreInAnyGHC :: Cabal.PackageName -> Bool
-packageIsCoreInAnyGHC pn = any (flip packageIsCore pn) (map snd ghcs)
+packageIsCoreInAnyGHC pn = any (flip packageIsCore pn) (map snd (M.elems ghcs))
 
 -- | Check if a dependency is satisfiable given a 'PackageIndex'
 -- representing the core packages in a GHC version.
@@ -144,7 +147,7 @@ minimumGHCVersionToBuildPackage :: GenericPackageDescription -> FlagAssignment -
                                                                                         , InstalledPackageIndex)
 minimumGHCVersionToBuildPackage gpd user_specified_fas =
   listToMaybe [ (cinfo, packageNamesFromPackageIndex pix, pkg_desc, picked_flags, pix)
-              | g@(cinfo, pix) <- ghcs
+              | g@(cinfo, pix) <- M.elems ghcs
               , Right (pkg_desc, picked_flags) <- return (packageBuildableWithGHCVersion gpd user_specified_fas g)]
 
 -- | Create an 'InstalledPackageIndex' from a ['Cabal.PackageIdentifier'].
