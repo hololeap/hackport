@@ -14,8 +14,13 @@ module Portage.GHCCore
         , finalizePD
         , platform
         , dependencySatisfiable
+          -- * core package indexes
         , ghcs
-        , ghc
+        , GHCWithIndexes
+        , WithUpgradeable(..)
+        , withUpgradeable
+        , NoUpgradeable(..)
+        , noUpgradeable
         -- hspec exports
         , packageIsCoreInAnyGHC
         ) where
@@ -42,9 +47,22 @@ import qualified Data.Set as S
 
 import Debug.Trace
 
+-- | Package index with "upgradeable" bundled packages kept in place
+newtype WithUpgradeable = WithUpgradeable InstalledPackageIndex
+-- | Package index with "upgradeable" bundled packages removed
+newtype NoUpgradeable = NoUpgradeable InstalledPackageIndex
+-- | Holds both types of package indexes as they are both needed separately
+type GHCWithIndexes = (DC.CompilerInfo, (WithUpgradeable, NoUpgradeable))
+
+withUpgradeable :: GHCWithIndexes -> InstalledPackageIndex
+withUpgradeable (_, (WithUpgradeable i, _)) = i
+
+noUpgradeable :: GHCWithIndexes -> InstalledPackageIndex
+noUpgradeable (_, (_, NoUpgradeable i)) = i
+
 -- | Try each @GHC@ version in the order of the key.
 -- The first @GHC@ version in this map is a minimum default.
-ghcs :: M.Map [Int] (DC.CompilerInfo, InstalledPackageIndex)
+ghcs :: M.Map [Int] GHCWithIndexes
 ghcs = M.fromList
     [ ([9,0,2],ghc902)
     , ([9,2,4],ghc924), ([9,2,5],ghc925), ([9,2,6],ghc926), ([9,2,7],ghc927), ([9,2,8],ghc928)
@@ -105,7 +123,10 @@ packageIsCore index pn = not . null $ lookupPackageName index pn
 -- >>> packageIsCoreInAnyGHC (Cabal.mkPackageName "array")
 -- True
 packageIsCoreInAnyGHC :: Cabal.PackageName -> Bool
-packageIsCoreInAnyGHC pn = any (flip packageIsCore pn) (map snd (M.elems ghcs))
+packageIsCoreInAnyGHC pn
+    = any (flip packageIsCore pn)
+        -- Use NoUpgradeable package index
+        (map noUpgradeable (M.elems ghcs))
 
 -- | Check if a dependency is satisfiable given a 'PackageIndex'
 -- representing the core packages in a GHC version.
@@ -145,10 +166,14 @@ minimumGHCVersionToBuildPackage :: GenericPackageDescription -> FlagAssignment -
                                                                                         , PackageDescription
                                                                                         , FlagAssignment
                                                                                         , InstalledPackageIndex)
-minimumGHCVersionToBuildPackage gpd user_specified_fas =
+minimumGHCVersionToBuildPackage gpd user_fas =
   listToMaybe [ (cinfo, packageNamesFromPackageIndex pix, pkg_desc, picked_flags, pix)
-              | g@(cinfo, pix) <- M.elems ghcs
-              , Right (pkg_desc, picked_flags) <- return (packageBuildableWithGHCVersion gpd user_specified_fas g)]
+                -- Use NoUpgradeable package index
+              | (cinfo, (_, NoUpgradeable pix)) <- M.elems ghcs
+              , Right (pkg_desc, picked_flags) <-
+                    let g = (cinfo, pix)
+                    in pure (packageBuildableWithGHCVersion gpd user_fas g)
+              ]
 
 -- | Create an 'InstalledPackageIndex' from a ['Cabal.PackageIdentifier'].
 -- This is used to generate an index of core @GHC@ packages from the provided
@@ -160,16 +185,17 @@ minimumGHCVersionToBuildPackage gpd user_specified_fas =
 -- what seems to be standard versioning for @ghc-experimental@ and @ghc-internal@.
 -- A Default library number will only be applied if it is not already present
 -- in @pids@.
-mkIndex :: [Int] -> [Cabal.PackageIdentifier] -> InstalledPackageIndex
-mkIndex ghcVer pids = fromList
+mkIndex :: Bool -> [Int] -> [Cabal.PackageIdentifier] -> InstalledPackageIndex
+mkIndex skipUpgradeable ghcVer pids = fromList
       [ emptyInstalledPackageInfo
-          { sourcePackageId = pindex
+          { sourcePackageId = pkgId
+          , installedUnitId = Cabal.mkUnitId (prettyShow pkgId)
           , exposed = True
           }
-      | pindex@(Cabal.PackageIdentifier _name _version) <- pids' ]
+      | pkgId <- pids' ]
   where
     pids' = S.toAscList $ S.union
-      ( S.fromList (filter filtUpgradeable pids) )
+      ( S.fromList (filter filt pids) )
       -- These defaults will be ignored if they are already defined in 'pids'
       ( S.fromList
           [ p "ghc-boot" ghcVer
@@ -179,6 +205,10 @@ mkIndex ghcVer pids = fromList
           , ghcExp "ghc-experimental" ghcVer
           , ghcExp "ghc-internal" ghcVer
           ] )
+
+    filt :: Cabal.PackageIdentifier -> Bool
+    filt | skipUpgradeable = filtUpgradeable
+         | otherwise = const True
 
     -- | only include 'Cabal.PackageIdentifier's whose 'Cabal.packageName' does
     --   not match anything from 'upgradeablePkgs'
@@ -232,67 +262,70 @@ ghc nrs = DC.unknownCompilerInfo c_id DC.NoAbiTag
 mkInfoIndex
   :: [Int]
   -> [Cabal.PackageIdentifier]
-  -> (DC.CompilerInfo, InstalledPackageIndex)
-mkInfoIndex ghcVer pids = (ghc ghcVer, mkIndex ghcVer pids)
+  -> GHCWithIndexes
+mkInfoIndex ghcVer pids =
+    let wu = WithUpgradeable (mkIndex False ghcVer pids)
+        nu = NoUpgradeable (mkIndex True ghcVer pids)
+    in (ghc ghcVer, (wu, nu))
 
-ghc9121 :: (DC.CompilerInfo, InstalledPackageIndex)
+ghc9121 :: GHCWithIndexes
 ghc9121 = mkInfoIndex [9,12,1] ghc9121_pkgs
 
-ghc9101 :: (DC.CompilerInfo, InstalledPackageIndex)
+ghc9101 :: GHCWithIndexes
 ghc9101 = mkInfoIndex [9,10,1] ghc9101_pkgs
 
-ghc984 :: (DC.CompilerInfo, InstalledPackageIndex)
+ghc984 :: GHCWithIndexes
 ghc984 = mkInfoIndex [9,8,4] ghc984_pkgs
 
-ghc983 :: (DC.CompilerInfo, InstalledPackageIndex)
+ghc983 :: GHCWithIndexes
 ghc983 = mkInfoIndex [9,8,3] ghc983_pkgs
 
-ghc982 :: (DC.CompilerInfo, InstalledPackageIndex)
+ghc982 :: GHCWithIndexes
 ghc982 = mkInfoIndex [9,8,2] ghc982_pkgs
 
-ghc966 :: (DC.CompilerInfo, InstalledPackageIndex)
+ghc966 :: GHCWithIndexes
 ghc966 = mkInfoIndex [9,6,6] ghc966_pkgs
 
-ghc965 :: (DC.CompilerInfo, InstalledPackageIndex)
+ghc965 :: GHCWithIndexes
 ghc965 = mkInfoIndex [9,6,5] ghc965_pkgs
 
-ghc964 :: (DC.CompilerInfo, InstalledPackageIndex)
+ghc964 :: GHCWithIndexes
 ghc964 = mkInfoIndex [9,6,4] ghc964_pkgs
 
-ghc963 :: (DC.CompilerInfo, InstalledPackageIndex)
+ghc963 :: GHCWithIndexes
 ghc963 = mkInfoIndex [9,6,3] ghc963_pkgs
 
-ghc962 :: (DC.CompilerInfo, InstalledPackageIndex)
+ghc962 :: GHCWithIndexes
 ghc962 = mkInfoIndex [9,6,2] ghc962_pkgs
 
-ghc948 :: (DC.CompilerInfo, InstalledPackageIndex)
+ghc948 :: GHCWithIndexes
 ghc948 = mkInfoIndex [9,4,8] ghc948_pkgs
 
-ghc947 :: (DC.CompilerInfo, InstalledPackageIndex)
+ghc947 :: GHCWithIndexes
 ghc947 = mkInfoIndex [9,4,7] ghc947_pkgs
 
-ghc946 :: (DC.CompilerInfo, InstalledPackageIndex)
+ghc946 :: GHCWithIndexes
 ghc946 = mkInfoIndex [9,4,6] ghc946_pkgs
 
-ghc945 :: (DC.CompilerInfo, InstalledPackageIndex)
+ghc945 :: GHCWithIndexes
 ghc945 = mkInfoIndex [9,4,5] ghc945_pkgs
 
-ghc928 :: (DC.CompilerInfo, InstalledPackageIndex)
+ghc928 :: GHCWithIndexes
 ghc928 = mkInfoIndex [9,2,8] ghc927_pkgs -- not a mistake: identical to 9.2.7
 
-ghc927 :: (DC.CompilerInfo, InstalledPackageIndex)
+ghc927 :: GHCWithIndexes
 ghc927 = mkInfoIndex [9,2,7] ghc927_pkgs
 
-ghc926 :: (DC.CompilerInfo, InstalledPackageIndex)
+ghc926 :: GHCWithIndexes
 ghc926 = mkInfoIndex [9,2,6] ghc926_pkgs
 
-ghc925 :: (DC.CompilerInfo, InstalledPackageIndex)
+ghc925 :: GHCWithIndexes
 ghc925 = mkInfoIndex [9,2,5] ghc925_pkgs
 
-ghc924 :: (DC.CompilerInfo, InstalledPackageIndex)
+ghc924 :: GHCWithIndexes
 ghc924 = mkInfoIndex [9,2,4] ghc924_pkgs
 
-ghc902 :: (DC.CompilerInfo, InstalledPackageIndex)
+ghc902 :: GHCWithIndexes
 ghc902 = mkInfoIndex [9,0,2] ghc902_pkgs
 
 -- | Core packages. Some packages are not included for simplicity (see 'mkIndex').

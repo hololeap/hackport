@@ -16,6 +16,8 @@ module Hackport.Env
     -- * Global env
   , GlobalEnv (..)
     -- * Subcommand env
+    -- ** DepGraph
+  , DepGraphEnv (..)
     -- ** List
   , ListEnv (..)
     -- ** Make Ebuild
@@ -42,6 +44,7 @@ import Data.Semigroup (Last(..))
 import qualified Distribution.Simple.Utils as Cabal
 import qualified Distribution.Verbosity as V
 
+import qualified Portage.PackageId as Portage
 import Status.Types (StatusDirection)
 
 -- | @hackport@ is noisy. Hold off on displaying any warnings until the bulk
@@ -101,6 +104,12 @@ data GlobalEnv = GlobalEnv
 
 instance Monoid GlobalEnv where
   mempty = GlobalEnv V.normal Nothing Nothing
+
+-- | Environment info specific to the @depgraph@ subcommand
+data DepGraphEnv = DepGraphEnv
+    { depGraphGHCTargets :: NonEmpty [Int]
+    , depGraphPackageTargets :: Maybe (NonEmpty Portage.PackageName)
+    } deriving (Show, Eq, Ord)
 
 -- | Environment info specific to the @list@ subcommand
 newtype ListEnv = ListEnv

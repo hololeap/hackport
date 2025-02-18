@@ -827,8 +827,11 @@ library hackport-internal
     , network-uri
     , optparse-applicative
     , parallel                              >=3.2.1.0
+    , parsable ^>=0.1
     , parsec
+    , portage-hs ^>=0.1
     , pretty
+    , pretty-simple
     , process
     , QuickCheck
     , split
@@ -836,6 +839,8 @@ library hackport-internal
     , text
     , time
     , transformers
+    , validation-selective ^>=0.2
+    , witherable ^>=0.4.2
     , xml
 
   -- Needed for doctests-v2 to work
@@ -855,6 +860,7 @@ library hackport-internal
     Cabal2Ebuild
     Data.Trie
     Error
+    Hackport.Command.DepGraph
     Hackport.Command.List
     Hackport.Command.MakeEbuild
     Hackport.Command.Merge

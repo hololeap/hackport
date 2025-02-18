@@ -15,9 +15,12 @@ import qualified Text.Parsec as P
 import qualified Text.Parsec.String as P
 import qualified Distribution.Verbosity as V
 
+import qualified Portage.PackageId as Portage
+import qualified Portage.Version as Portage
 import Status.Types (StatusDirection(..))
 
 import Hackport.Env
+import Hackport.Command.DepGraph
 import Hackport.Command.List
 import Hackport.Command.MakeEbuild
 import Hackport.Command.Update
@@ -25,6 +28,7 @@ import Hackport.Command.Status
 import Hackport.Command.Merge
 import Hackport.Completion
 
+import Distribution.Parsec
 import Distribution.Pretty (prettyShow)
 import Distribution.Simple.Utils (cabalVersion)
 
@@ -107,6 +111,7 @@ globalParser = Opt.info (Opt.helper <*> parser) infoMod
             <> subcmd "update"      updateAction     updateParser
             <> subcmd "status"      statusAction     statusParser
             <> subcmd "merge"       mergeAction      mergeParser
+            <> subcmd "depgraph"    depGraphAction   depGraphParser
 
           pure $ mode GlobalEnv
             { globalVerbosity = v
@@ -271,6 +276,37 @@ mergeParser = Opt.info parser infoMod
 
     infoMod :: Opt.InfoMod MergeEnv
     infoMod = Opt.progDesc "Make an ebuild out of hackage package"
+
+-----------------------------------------------------------------------
+-- Dep Graph
+-----------------------------------------------------------------------
+
+depGraphParser :: Opt.ParserInfo DepGraphEnv
+depGraphParser = Opt.info parser infoMod
+  where
+    parser :: Opt.Parser DepGraphEnv
+    parser = do
+        x <- CNE.some
+            $ Opt.option
+                    (Opt.maybeReader maybeVersion)
+                    (  Opt.long "ghc"
+                    <> Opt.short 'G'
+                    <> Opt.metavar "GHC-VERSION"
+                    )
+        y <- optional $ CNE.some
+            $ Opt.argument
+                    (Opt.maybeReader maybePkgNames)
+                    (Opt.metavar "TARGET-PACKAGE")
+        pure $ DepGraphEnv x y
+
+    infoMod :: Opt.InfoMod DepGraphEnv
+    infoMod = Opt.progDesc "Dump a dependency graph for given packages"
+
+    maybeVersion :: String -> Maybe [Int]
+    maybeVersion = fmap Portage.versionNumber . simpleParsec
+
+    maybePkgNames :: String -> Maybe Portage.PackageName
+    maybePkgNames = fmap Portage.packageId . simpleParsec
 
 -----------------------------------------------------------------------
 -- Misc
